@@ -3,12 +3,13 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
-import { Pos, PlayerCommand, playerViewRadius, World, Sock, Wall, Basket, Player } from "./world.js";
+import { Pos, PlayerCommand, playerViewRadius, WorldError, World, Sock, Wall, Basket, Player } from "./world.js";
 
 const sockAmount = 10;
 
 const llmHostport = "localhost:1234";
 const llmModel = "google/gemma-4-e2b";
+const commandPrefix = "PERFORM_COMMAND:";
 
 const world = new World(12, 12);
 const player = new Player();
@@ -32,13 +33,19 @@ interface WorldState {
     width: number;
     height: number;
     entities: (string | null)[];
+    inventory: string[];
 };
 
 function getWorldState(): WorldState {
     const entityNames: (string | null)[] = world.entityGrid.map((entity) => (
         (entity === null) ? null : entity.getName()
     ));
-    return { width: world.width, height: world.height, entities: entityNames };
+    return {
+        width: world.width,
+        height: world.height,
+        entities: entityNames,
+        inventory: player.inventory.map((entity) => entity.getName()),
+    };
 }
 
 const staticDir = path.join(
@@ -76,7 +83,6 @@ interface ResponseTurn {
 
 const parseResponseMessage = (message: string): PlayerCommand => {
     const lines = message.split(/\r?\n/);
-    const commandPrefix = "PERFORM_COMMAND:";
     let commandLine: string | undefined;
     for (let lineIndex = lines.length - 1; lineIndex >= 0; lineIndex--) {
         if (lines[lineIndex].includes(commandPrefix)) {
@@ -85,7 +91,7 @@ const parseResponseMessage = (message: string): PlayerCommand => {
         }
     }
     if (commandLine === undefined) {
-        throw new Error(`${commandPrefix} not found in message.`);
+        throw new WorldError(`${commandPrefix} not found in message.`);
     }
     const commandStart = commandLine.indexOf(commandPrefix);
     const remainder = commandLine
@@ -98,33 +104,57 @@ const parseResponseMessage = (message: string): PlayerCommand => {
     };
 }
 
+const playerCommandToText = (command: PlayerCommand): string => {
+    return `${commandPrefix} ${command.commandName} ${command.args.join(" ")}`;
+};
+
 const runLlm = async () => {
+    let lastCommand: PlayerCommand | null = null;
+    let lastCommandError: string | null = null;
     while (true) {
         console.log("========================================================");
         console.log("Prompting LLM...\n");
         const visibleEntitiesText = player.getVisibleEntitiesText();
-        const prompt = `You are a player in a virtual world which is a grid of ${world.width} by ${world.height} spaces. Your mission is to collect all of the socks in the world and put them in a basket.
+        let lastCommandDescription: string;
+        if (lastCommand === null) {
+            lastCommandDescription = "You have not issued any commands yet.";
+        } else {
+            const lastCommandText = playerCommandToText(lastCommand);
+            if (lastCommandError === null) {
+                lastCommandDescription = `During your previous turn, you issued this command:
+${lastCommandText}
+This command finished successfully.`;
+            } else {
+                lastCommandDescription = `During your previous turn, you tried to issue this command:
+${lastCommandText}
+This command failed with the following message: "${lastCommandError}"`;
+            }
+        }
+        const prompt = `You are a player in a virtual world which is a grid of ${world.width} by ${world.height} spaces. The world contains socks in random positions and a basket. Your mission is to collect socks and put them in the basket.
 
-These are the contents of the spaces which are visible within a 5 by 5 viewport centered around you:
+You are able to perform commands to move and interact with the world. For all commands, <direction> may be \`north\`, \`south\`, \`east\`, or \`west\`.
+Each command begins with \`${commandPrefix}\`, followed by a command name and arguments. The following commands are available:
+* \`${commandPrefix} walk <direction>\`
+    * Moves you in the specified direction. This command cannot pick up items.
+    * For example: \`${commandPrefix} walk east\` moves you east.
+* \`${commandPrefix} takeItem <direction>\`
+    * Picks up the item which is adjacent to you (if any) in the specified direction.
+    * The item will be added to your inventory. This command will fail if your inventory is full.
+    * For example: \`${commandPrefix} takeItem north\` picks up the item immediately north of you.
+* \`${commandPrefix} putItem <inventoryItemNumber> <direction>\`
+    * Places the specified inventory item into the space adjacent to you in the specified direction.
+    * If the space contains a basket, this command puts the item into the basket. Otherwise, this command puts the item on the ground.
+    * For example: \`${commandPrefix} putItem 2 south\` places inventory item #2 immediately south of you.
+
+${lastCommandDescription}
+
+These are the current contents of the spaces which are visible within a 5 by 5 viewport centered around you:
 
 ${visibleEntitiesText}
 
 ${player.getInventoryDescription()}
 
-You are able to perform commands to move and interact with the world. For all commands, <direction> may be \`north\`, \`south\`, \`east\`, or \`west\`.
-Each command begins with \`PERFORM_COMMAND:\`, followed by a command name and arguments. The following commands are available:
-* \`PERFORM_COMMAND: walk <direction>\`
-    * Moves you in the specified direction. This command cannot pick up items.
-    * For example: \`PERFORM_COMMAND: walk east\` moves you east.
-* \`PERFORM_COMMAND: takeItem <direction>\`
-    * Picks up the item which is next to you (if any) in the specified direction.
-    * For example: \`PERFORM_COMMAND: takeItem north\` picks up the item immediately north of you.
-* \`PERFORM_COMMAND: putItem <inventoryItemNumber> <direction>\`
-    * Places the specified inventory item into the space next to you in the specified direction.
-    * If the space contains a basket, this command puts the item into the basket. Otherwise, this command puts the item on the ground.
-    * For example: \`PERFORM_COMMAND: putItem 2 south\` places inventory item #2 immediately south of you.
-
-Please respond with a command now to perform your next action in the world. Make sure that the command begins with \`PERFORM_COMMAND:\`.`;
+Please respond with a command now to perform your next action in the world. Make sure that the command begins with \`${commandPrefix}\`.`;
         const fetchResponse = await fetch(`http://${llmHostport}/api/v1/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -146,11 +176,16 @@ Please respond with a command now to perform your next action in the world. Make
         console.log(responseMessage);
         console.log("");
         try {
-            const command = parseResponseMessage(responseMessage);
-            player.performCommand(command);
+            lastCommand = parseResponseMessage(responseMessage);
+            player.performCommand(lastCommand);
+            lastCommandError = null;
         } catch (error) {
-            console.log(error.message);
-            console.log(error.stack);
+            if (error instanceof WorldError) {
+                lastCommandError = error.message;
+                console.log(lastCommandError);
+            } else {
+                throw error;
+            }
         }
         broadcastWorldState();
     }

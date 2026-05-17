@@ -9,6 +9,10 @@ export interface PlayerCommand {
 export const playerViewRadius = 2;
 const maxInventorySize: number = 3;
 
+export class WorldError extends Error {
+
+}
+
 export class World {
     width: number;
     height: number;
@@ -68,7 +72,7 @@ export abstract class Entity {
     }
 
     receiveItem(item: Entity): void {
-        throw new Error("This entity is not able to receive items.");
+        throw new WorldError("This entity is not able to receive items.");
     }
 
     // `direction` may be "north", "south", "east", or "west" (not case sensitive).
@@ -89,7 +93,7 @@ export abstract class Entity {
                 delta = [-1, 0];
                 break;
             default:
-                throw new Error(
+                throw new WorldError(
                     `Invalid direction: "${direction}". Expected "north", "south", "east", or "west".`
                 );
         }
@@ -100,7 +104,7 @@ export abstract class Entity {
     getPosInBounds(direction: string): Pos {
         const pos = this.getPos(direction);
         if (pos === null) {
-            throw new Error("That direction is out of bounds.");
+            throw new WorldError("That direction is out of bounds.");
         }
         return pos;
     }
@@ -110,10 +114,10 @@ export abstract class Entity {
         const oldPos = this.pos;
         const newPos: Pos = this.getPos(direction);
         if (newPos === null) {
-            throw new Error("Cannot walk out of bounds.");
+            throw new WorldError("Cannot walk out of bounds.");
         }
         if (world.getEntity(newPos) !== null) {
-            throw new Error("Cannot walk into occupied space.");
+            throw new WorldError("Cannot walk into occupied space.");
         }
         world.setEntity(oldPos, null);
         world.setEntity(newPos, this);
@@ -165,13 +169,13 @@ export class Player extends Entity {
         const pos = this.getPosInBounds(direction);
         const entity = this.world.getEntity(pos);
         if (entity === null) {
-            throw new Error("There is no item in that direction.");
+            throw new WorldError("There is no item in that direction.");
         }
         if (!entity.canBeGathered()) {
-            throw new Error("That item cannot be gathered.");
+            throw new WorldError("That item cannot be gathered.");
         }
         if (this.inventory.length >= maxInventorySize) {
-            throw new Error("Your inventory is full.");
+            throw new WorldError("Your inventory is full.");
         }
         this.world.setEntity(pos, null);
         this.inventory.push(entity);
@@ -179,7 +183,7 @@ export class Player extends Entity {
 
     putItem(inventoryIndex: number, direction: string): void {
         if (inventoryIndex < 0 || inventoryIndex >= this.inventory.length) {
-            throw new Error("Inventory index is out of bounds.");
+            throw new WorldError("Inventory index is out of bounds.");
         }
         const item = this.inventory[inventoryIndex];
         const pos = this.getPosInBounds(direction);
@@ -223,7 +227,7 @@ export class Player extends Entity {
         switch (command.commandName) {
             case "walk": {
                 if (command.args.length !== 1) {
-                    throw new Error(
+                    throw new WorldError(
                         `walk expects 1 argument, got ${command.args.length}.`
                     );
                 }
@@ -232,7 +236,7 @@ export class Player extends Entity {
             }
             case "takeItem": {
                 if (command.args.length !== 1) {
-                    throw new Error(
+                    throw new WorldError(
                         `takeItem expects 1 argument, got ${command.args.length}.`
                     );
                 }
@@ -241,13 +245,13 @@ export class Player extends Entity {
             }
             case "putItem": {
                 if (command.args.length !== 2) {
-                    throw new Error(
+                    throw new WorldError(
                         `putItem expects 2 arguments, got ${command.args.length}.`
                     );
                 }
                 const inventoryItemNumber = Number(command.args[0]);
                 if (!Number.isInteger(inventoryItemNumber)) {
-                    throw new Error(
+                    throw new WorldError(
                         `Invalid inventory item number: "${command.args[0]}".`
                     );
                 }
@@ -255,7 +259,7 @@ export class Player extends Entity {
                     inventoryItemNumber < 1
                     || inventoryItemNumber > this.inventory.length
                 ) {
-                    throw new Error(
+                    throw new WorldError(
                         `Inventory item number is out of bounds: ${inventoryItemNumber}.`
                     );
                 }
@@ -263,7 +267,7 @@ export class Player extends Entity {
                 return;
             }
             default:
-                throw new Error(
+                throw new WorldError(
                     `Unrecognized command: "${command.commandName}".`
                 );
         }
@@ -274,7 +278,7 @@ export class Player extends Entity {
             const capacityText = (maxInventorySize === 1)
                 ? "You can only hold one item at a time."
                 : `You can hold up to ${maxInventorySize} items.`;
-            return "Your inventory is empty. " + capacityText;
+            return "Your inventory is currently empty. " + capacityText;
         }
         const itemLines = this.inventory.map((item, index) => (
             `* Inventory item #${index + 1}: ${item.getName()}`
@@ -284,7 +288,7 @@ export class Player extends Entity {
             ? "Your inventory is full, so you cannot hold any more items."
             : `You have inventory space for ${remainingSpace} more item${remainingSpace === 1 ? "" : "s"}.`;
         return [
-            "Your inventory contains the following:",
+            "Your inventory currently contains the following:",
             ...itemLines,
             capacityLine,
         ].join("\n");

@@ -1,4 +1,5 @@
 const canvas = document.getElementById("canvas");
+const inventoryEl = document.getElementById("inventory");
 const ctx = canvas.getContext("2d");
 const cellSize = 32;
 
@@ -18,6 +19,15 @@ function setupCanvas(logicalWidth, logicalHeight) {
     canvas.width = Math.round(logicalWidth * dpr);
     canvas.height = Math.round(logicalHeight * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function updateInventory(inventory) {
+    if (inventory.length === 0) {
+        inventoryEl.textContent = "Player inventory: (empty)";
+        return;
+    }
+    const itemIcons = inventory.map((name) => icons[name] ?? "?").join("");
+    inventoryEl.textContent = `Player inventory: ${itemIcons}`;
 }
 
 function drawPlayerViewOutline(x, y) {
@@ -86,6 +96,8 @@ function drawWorld(state) {
             y * cellSize + cellSize / 2
         );
     }
+
+    updateInventory(state.inventory);
 }
 
 async function init() {
