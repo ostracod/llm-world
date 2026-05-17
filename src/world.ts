@@ -72,7 +72,7 @@ export abstract class Entity {
     }
 
     receiveItem(item: Entity): void {
-        throw new WorldError("This entity is not able to receive items.");
+        throw new WorldError("The entity in that space is not able to receive items.");
     }
 
     // `direction` may be "north", "south", "east", or "west" (not case sensitive).
@@ -169,10 +169,10 @@ export class Player extends Entity {
         const pos = this.getPosInBounds(direction);
         const entity = this.world.getEntity(pos);
         if (entity === null) {
-            throw new WorldError("There is no item in that direction.");
+            throw new WorldError("There is no item in that space.");
         }
         if (!entity.canBeGathered()) {
-            throw new WorldError("That item cannot be gathered.");
+            throw new WorldError("The item in that space cannot be gathered.");
         }
         if (this.inventory.length >= maxInventorySize) {
             throw new WorldError("Your inventory is full.");
@@ -213,12 +213,14 @@ export class Player extends Entity {
     getVisibleEntitiesText(): string {
         const [px, py] = this.pos!;
         const lines: string[] = [];
+        let rowNumber = 1;
         for (let y = py - playerViewRadius; y <= py + playerViewRadius; y++) {
             const names: string[] = [];
             for (let x = px - playerViewRadius; x <= px + playerViewRadius; x++) {
                 names.push(this.getVisibleEntityName(x, y));
             }
-            lines.push(names.join(", "));
+            lines.push(`Row #${rowNumber}: ${names.join(", ")}`);
+            rowNumber += 1;
         }
         return lines.join("\n");
     }

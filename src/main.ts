@@ -8,7 +8,7 @@ import { Pos, PlayerCommand, playerViewRadius, WorldError, World, Sock, Wall, Ba
 const sockAmount = 10;
 
 const llmHostport = "localhost:1234";
-const llmModel = "google/gemma-4-e2b";
+const llmModel = "google/gemma-4-e4b";
 const commandPrefix = "PERFORM_COMMAND:";
 
 const world = new World(12, 12);
@@ -81,6 +81,115 @@ interface ResponseTurn {
     content: string;
 }
 
+interface ChatStreamEvent {
+    type: string;
+    content?: string;
+    result?: {
+        output: ResponseTurn[];
+    };
+    error?: unknown;
+}
+
+const fetchLlmResponseMessage = async (prompt: string): Promise<string> => {
+    const fetchResponse = await fetch(`http://${llmHostport}/api/v1/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            model: llmModel,
+            system_prompt: "",
+            input: prompt,
+            stream: true,
+        }),
+    });
+    if (!fetchResponse.ok) {
+        throw new Error(`LLM request failed with status ${fetchResponse.status}.`);
+    }
+    if (fetchResponse.body === null) {
+        throw new Error("LLM response body is empty.");
+    }
+
+    const decoder = new TextDecoder();
+    const reader = fetchResponse.body.getReader();
+    let buffer = "";
+    let responseMessage = "";
+    let reasoningHeaderPrinted = false;
+
+    const processEventBlock = (block: string): void => {
+        if (block.trim() === "") {
+            return;
+        }
+        let dataJson: string | undefined;
+        for (const line of block.split("\n")) {
+            if (line.startsWith("data: ")) {
+                dataJson = line.slice(6);
+            }
+        }
+        if (dataJson === undefined) {
+            return;
+        }
+        const event = JSON.parse(dataJson) as ChatStreamEvent;
+        switch (event.type) {
+            case "reasoning.start":
+                if (!reasoningHeaderPrinted) {
+                    console.log("LLM reasoning:");
+                    reasoningHeaderPrinted = true;
+                }
+                break;
+            case "reasoning.delta":
+                if (!reasoningHeaderPrinted) {
+                    console.log("LLM reasoning:");
+                    reasoningHeaderPrinted = true;
+                }
+                if (event.content !== undefined) {
+                    process.stdout.write(event.content);
+                }
+                break;
+            case "reasoning.end":
+                if (reasoningHeaderPrinted) {
+                    console.log("");
+                }
+                break;
+            case "message.delta":
+                if (event.content !== undefined) {
+                    responseMessage += event.content;
+                }
+                break;
+            case "chat.end": {
+                const messageTurn = event.result?.output.find(
+                    (item) => item.type === "message"
+                );
+                if (messageTurn !== undefined) {
+                    responseMessage = messageTurn.content;
+                }
+                break;
+            }
+            case "error":
+                throw new Error(`LLM stream error: ${JSON.stringify(event.error)}`);
+        }
+    };
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+            break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        buffer = buffer.replace(/\r\n/g, "\n");
+        let boundaryIndex: number;
+        while ((boundaryIndex = buffer.indexOf("\n\n")) !== -1) {
+            const block = buffer.slice(0, boundaryIndex);
+            buffer = buffer.slice(boundaryIndex + 2);
+            processEventBlock(block);
+        }
+    }
+    buffer = buffer.replace(/\r\n/g, "\n");
+    if (buffer.trim() !== "") {
+        processEventBlock(buffer);
+    }
+
+    return responseMessage;
+};
+
 const parseResponseMessage = (message: string): PlayerCommand => {
     const lines = message.split(/\r?\n/);
     let commandLine: string | undefined;
@@ -152,26 +261,12 @@ These are the current contents of the spaces which are visible within a 5 by 5 v
 
 ${visibleEntitiesText}
 
+(Rows are listed from north to south, and each row lists spaces from west to east.)
+
 ${player.getInventoryDescription()}
 
 Please respond with a command now to perform your next action in the world. Make sure that the command begins with \`${commandPrefix}\`.`;
-        const fetchResponse = await fetch(`http://${llmHostport}/api/v1/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                model: llmModel,
-                system_prompt: "",
-                input: prompt,
-            }),
-        });
-        const responseTurns = (await fetchResponse.json()).output as ResponseTurn[];
-        const responseReasoning = responseTurns.find((item) => (item.type === "reasoning")).content;
-        const responseMessage = responseTurns.find((item) => (item.type === "message")).content;
-        if (typeof responseReasoning !== "undefined") {
-            console.log("LLM reasoning:");
-            console.log(responseReasoning);
-            console.log("");
-        }
+        const responseMessage = await fetchLlmResponseMessage(prompt);
         console.log("LLM response message:");
         console.log(responseMessage);
         console.log("");
