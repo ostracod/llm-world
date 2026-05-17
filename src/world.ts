@@ -1,8 +1,13 @@
 
 export type Pos = [number, number]; // [x, y] coordinates.
 
+export interface PlayerCommand {
+    commandName: string;
+    args: string[];
+}
+
 export const playerViewRadius = 2;
-const maxInventorySize = 3;
+const maxInventorySize: number = 3;
 
 export class World {
     width: number;
@@ -157,9 +162,6 @@ export class Player extends Entity {
     }
 
     takeItem(direction: string): void {
-        if (this.inventory.length >= maxInventorySize) {
-            throw new Error("Your inventory is full.");
-        }
         const pos = this.getPosInBounds(direction);
         const entity = this.world.getEntity(pos);
         if (entity === null) {
@@ -167,6 +169,9 @@ export class Player extends Entity {
         }
         if (!entity.canBeGathered()) {
             throw new Error("That item cannot be gathered.");
+        }
+        if (this.inventory.length >= maxInventorySize) {
+            throw new Error("Your inventory is full.");
         }
         this.world.setEntity(pos, null);
         this.inventory.push(entity);
@@ -212,5 +217,76 @@ export class Player extends Entity {
             lines.push(names.join(", "));
         }
         return lines.join("\n");
+    }
+
+    performCommand(command: PlayerCommand): void {
+        switch (command.commandName) {
+            case "walk": {
+                if (command.args.length !== 1) {
+                    throw new Error(
+                        `walk expects 1 argument, got ${command.args.length}.`
+                    );
+                }
+                this.walk(command.args[0]);
+                return;
+            }
+            case "takeItem": {
+                if (command.args.length !== 1) {
+                    throw new Error(
+                        `takeItem expects 1 argument, got ${command.args.length}.`
+                    );
+                }
+                this.takeItem(command.args[0]);
+                return;
+            }
+            case "putItem": {
+                if (command.args.length !== 2) {
+                    throw new Error(
+                        `putItem expects 2 arguments, got ${command.args.length}.`
+                    );
+                }
+                const inventoryItemNumber = Number(command.args[0]);
+                if (!Number.isInteger(inventoryItemNumber)) {
+                    throw new Error(
+                        `Invalid inventory item number: "${command.args[0]}".`
+                    );
+                }
+                if (
+                    inventoryItemNumber < 1
+                    || inventoryItemNumber > this.inventory.length
+                ) {
+                    throw new Error(
+                        `Inventory item number is out of bounds: ${inventoryItemNumber}.`
+                    );
+                }
+                this.putItem(inventoryItemNumber - 1, command.args[1]);
+                return;
+            }
+            default:
+                throw new Error(
+                    `Unrecognized command: "${command.commandName}".`
+                );
+        }
+    }
+
+    getInventoryDescription(): string {
+        if (this.inventory.length === 0) {
+            const capacityText = (maxInventorySize === 1)
+                ? "You can only hold one item at a time."
+                : `You can hold up to ${maxInventorySize} items.`;
+            return "Your inventory is empty. " + capacityText;
+        }
+        const itemLines = this.inventory.map((item, index) => (
+            `* Inventory item #${index + 1}: ${item.getName()}`
+        ));
+        const remainingSpace = maxInventorySize - this.inventory.length;
+        const capacityLine = (remainingSpace === 0)
+            ? "Your inventory is full, so you cannot hold any more items."
+            : `You have inventory space for ${remainingSpace} more item${remainingSpace === 1 ? "" : "s"}.`;
+        return [
+            "Your inventory contains the following:",
+            ...itemLines,
+            capacityLine,
+        ].join("\n");
     }
 }
