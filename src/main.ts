@@ -3,13 +3,13 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { WebSocketServer, WebSocket } from "ws";
-import { Pos, PlayerCommand, playerViewRadius, WorldError, World, Sock, Wall, Basket, Player } from "./world.js";
+import { Pos, PlayerCommand, playerViewRadius, maxMemoLength, WorldError, World, Sock, Wall, Basket, Player } from "./world.js";
+import { commandPrefix, parseResponseMessage, playerCommandToText } from "./command.js";
 
 const sockAmount = 10;
 
 const llmHostport = "localhost:1234";
 const llmModel = "google/gemma-4-e4b";
-const commandPrefix = "PERFORM_COMMAND:";
 
 const world = new World(12, 12);
 const player = new Player();
@@ -190,33 +190,6 @@ const fetchLlmResponseMessage = async (prompt: string): Promise<string> => {
     return responseMessage;
 };
 
-const parseResponseMessage = (message: string): PlayerCommand => {
-    const lines = message.split(/\r?\n/);
-    let commandLine: string | undefined;
-    for (let lineIndex = lines.length - 1; lineIndex >= 0; lineIndex--) {
-        if (lines[lineIndex].includes(commandPrefix)) {
-            commandLine = lines[lineIndex];
-            break;
-        }
-    }
-    if (commandLine === undefined) {
-        throw new WorldError(`${commandPrefix} not found in message.`);
-    }
-    const commandStart = commandLine.indexOf(commandPrefix);
-    const remainder = commandLine
-        .slice(commandStart + commandPrefix.length)
-        .trim()
-    const parts = remainder.split(/\s+/);
-    return {
-        commandName: parts[0],
-        args: parts.slice(1),
-    };
-}
-
-const playerCommandToText = (command: PlayerCommand): string => {
-    return `${commandPrefix} ${command.commandName} ${command.args.join(" ")}`;
-};
-
 const runLlm = async () => {
     let lastCommand: PlayerCommand | null = null;
     let lastCommandError: string | null = null;
@@ -241,8 +214,9 @@ This command failed with the following message: "${lastCommandError}"`;
         }
         const prompt = `You are a player in a virtual world which is a grid of ${world.width} by ${world.height} spaces. The world contains socks in random positions and a basket. Your mission is to collect socks and put them in the basket.
 
-You are able to perform commands to move and interact with the world. For all commands, <direction> may be \`north\`, \`south\`, \`east\`, or \`west\`.
-Each command begins with \`${commandPrefix}\`, followed by a command name and arguments. The following commands are available:
+You are able to perform commands to move, interact with the world, and update your memories ("memos").
+Each command begins with \`${commandPrefix}\`, followed by a command name and arguments. For commands which accept a direction, <direction> may be \`north\`, \`south\`, \`east\`, or \`west\`.
+The following commands are available:
 * \`${commandPrefix} walk <direction>\`
     * Moves you in the specified direction. This command cannot pick up items.
     * For example: \`${commandPrefix} walk east\` moves you east.
@@ -254,8 +228,21 @@ Each command begins with \`${commandPrefix}\`, followed by a command name and ar
     * Places the specified inventory item into the space adjacent to you in the specified direction.
     * If the space contains a basket, this command puts the item into the basket. Otherwise, this command puts the item on the ground.
     * For example: \`${commandPrefix} putItem 2 south\` places inventory item #2 immediately south of you.
+* \`${commandPrefix} addMemo "<message>"\`
+    * Adds a memo which will be visible to you during future turns.
+    * Each memo cannot be longer than ${maxMemoLength} characters long, and cannot contain newlines.
+    * For example: \`${commandPrefix} addMemo "I need to get socks."\` adds a memo with the message "I need to get socks.".
+* \`${commandPrefix} deleteMemo <memoNumber>\`
+    * Deletes the specified memo, so you will not see it during future turns.
+    * For example: \`${commandPrefix} deleteMemo 3\` deletes memo #3.
+
+You should use memos to save important information about the world and your current strategy. Between turns your chain-of-thought reasoning is erased, but memos persist. Before you move or interact with the world, make sure that your memos are updated to reflect your current observations and plans.
 
 ${lastCommandDescription}
+
+${player.getMemosText()}
+
+Your current coordinates are X = ${player.pos[0]}, Y = ${player.pos[1]}.
 
 These are the current contents of the spaces which are visible within a 5 by 5 viewport centered around you:
 
@@ -265,13 +252,14 @@ ${visibleEntitiesText}
 
 ${player.getInventoryDescription()}
 
-Please respond with a command now to perform your next action in the world. Make sure that the command begins with \`${commandPrefix}\`.`;
+Please respond with a command now to perform your next action. Make sure that the command begins with \`${commandPrefix}\`.`;
+        console.log(prompt);
         const responseMessage = await fetchLlmResponseMessage(prompt);
         console.log("LLM response message:");
         console.log(responseMessage);
-        console.log("");
         try {
             lastCommand = parseResponseMessage(responseMessage);
+            console.log(lastCommand);
             player.performCommand(lastCommand);
             lastCommandError = null;
         } catch (error) {
@@ -282,6 +270,7 @@ Please respond with a command now to perform your next action in the world. Make
                 throw error;
             }
         }
+        console.log("");
         broadcastWorldState();
     }
 }

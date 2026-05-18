@@ -8,6 +8,8 @@ export interface PlayerCommand {
 
 export const playerViewRadius = 2;
 const maxInventorySize: number = 3;
+export const maxMemoAmount = 10;
+export const maxMemoLength = 200;
 
 export class WorldError extends Error {
 
@@ -155,10 +157,12 @@ export class Basket extends Entity {
 
 export class Player extends Entity {
     inventory: Entity[];
+    memos: string[];
 
     constructor() {
         super();
         this.inventory = [];
+        this.memos = [];
     }
 
     getName(): string {
@@ -196,6 +200,25 @@ export class Player extends Entity {
         this.inventory.splice(inventoryIndex, 1);
     }
 
+    addMemo(message: string): void {
+        if (message.length > maxMemoLength) {
+            throw new WorldError(
+                `Memo cannot be longer than ${maxMemoLength} characters.`
+            );
+        }
+        if (this.memos.length >= maxMemoAmount) {
+            throw new WorldError("You do not have room to save any more memos.");
+        }
+        this.memos.push(message);
+    }
+
+    deleteMemo(memoIndex: number): void {
+        if (memoIndex < 0 || memoIndex >= this.memos.length) {
+            throw new WorldError("Memo index is out of bounds.");
+        }
+        this.memos.splice(memoIndex, 1);
+    }
+
     private getVisibleEntityName(x: number, y: number): string {
         if (!this.world.containsPos([x, y])) {
             return "wall";
@@ -219,7 +242,7 @@ export class Player extends Entity {
             for (let x = px - playerViewRadius; x <= px + playerViewRadius; x++) {
                 names.push(this.getVisibleEntityName(x, y));
             }
-            lines.push(`Row #${rowNumber}: ${names.join(", ")}`);
+            lines.push(`Y = ${y}: ${names.join(", ")}`);
             rowNumber += 1;
         }
         return lines.join("\n");
@@ -268,6 +291,30 @@ export class Player extends Entity {
                 this.putItem(inventoryItemNumber - 1, command.args[1]);
                 return;
             }
+            case "addMemo": {
+                if (command.args.length !== 1) {
+                    throw new WorldError(
+                        `addMemo expects 1 argument, got ${command.args.length}.`
+                    );
+                }
+                this.addMemo(command.args[0]);
+                return;
+            }
+            case "deleteMemo": {
+                if (command.args.length !== 1) {
+                    throw new WorldError(
+                        `deleteMemo expects 1 argument, got ${command.args.length}.`
+                    );
+                }
+                const memoNumber = Number(command.args[0]);
+                if (!Number.isInteger(memoNumber)) {
+                    throw new WorldError(
+                        `Invalid memo number: "${command.args[0]}".`
+                    );
+                }
+                this.deleteMemo(memoNumber - 1);
+                return;
+            }
             default:
                 throw new WorldError(
                     `Unrecognized command: "${command.commandName}".`
@@ -286,12 +333,28 @@ export class Player extends Entity {
             `* Inventory item #${index + 1}: ${item.getName()}`
         ));
         const remainingSpace = maxInventorySize - this.inventory.length;
-        const capacityLine = (remainingSpace === 0)
+        const capacityLine = (remainingSpace <= 0)
             ? "Your inventory is full, so you cannot hold any more items."
-            : `You have inventory space for ${remainingSpace} more item${remainingSpace === 1 ? "" : "s"}.`;
+            : `You have inventory space for ${remainingSpace} more item${(remainingSpace === 1) ? "" : "s"}.`;
         return [
             "Your inventory currently contains the following:",
             ...itemLines,
+            capacityLine,
+        ].join("\n");
+    }
+
+    getMemosText(): string {
+        if (this.memos.length === 0) {
+            return `You have not saved any memos yet. You can save up to ${maxMemoAmount} memos.`;
+        }
+        const memoLines = this.memos.map((memo, index) => `* Memo #${index + 1}: "${memo}"`);
+        const remainingSpace = maxMemoAmount - this.memos.length;
+        const capacityLine = (remainingSpace <= 0)
+            ? "You do not have room to save any more memos."
+            : `You have room to save ${remainingSpace} more memo${(remainingSpace === 1) ? "" : "s"}.`;
+        return [
+            "These are the memos which you have saved for yourself in past turns:",
+            ...memoLines,
             capacityLine,
         ].join("\n");
     }
