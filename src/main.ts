@@ -34,6 +34,7 @@ interface WorldState {
     height: number;
     entities: (string | null)[];
     inventory: string[];
+    memos: string[];
 };
 
 function getWorldState(): WorldState {
@@ -45,6 +46,7 @@ function getWorldState(): WorldState {
         height: world.height,
         entities: entityNames,
         inventory: player.inventory.map((entity) => entity.getName()),
+        memos: [...player.memos],
     };
 }
 
@@ -233,10 +235,13 @@ The following commands are available:
 * \`${commandPrefix} addMemo "<message>"\`
     * Adds a memo which will be visible to you during future turns.
     * Each memo cannot be longer than ${maxMemoLength} characters long, and cannot contain newlines.
-    * For example: \`${commandPrefix} addMemo "I need to get socks."\` adds a memo with the message "I need to get socks.".
+    * For example: \`${commandPrefix} addMemo "I need to do X."\` adds a memo with the message "I need to do X.".
 * \`${commandPrefix} deleteMemo <memoNumber>\`
     * Deletes the specified memo, so you will not see it during future turns.
     * For example: \`${commandPrefix} deleteMemo 3\` deletes memo #3.
+* \`${commandPrefix} updateMemo <memoNumber> "<message>"\`
+    * Changes the message of the specified memo.
+    * For example: \`${commandPrefix} replaceMemo 1 "I need to do Y."\` updates memo #1 to have the message "I need to do Y.".
 
 You should use memos to save important information about the world and your current strategy. You will forget all of your current chain-of-thought reasoning during the next turn, but the memos will persist.
 
@@ -257,14 +262,13 @@ ${viewportText}
 ${player.getInventoryDescription()}
 
 When deciding your next command, you should use the following prioritization:
-1. If a memo directly contradicts your current observations, delete the memo.
+1. If a memo directly contradicts your current observations, delete or update the memo.
 2. If two memos seem to be redundant with each other, delete one of the memos.
 3. If you see something in the world which is important to remember, write a memo about it (if such a memo does not already exist).
 4. If you come up with a new plan, write a memo about it.
 5. Otherwise, move or interact with items.
 
 Please respond with a single command now to perform during the current turn. Make sure that the command begins with \`${commandPrefix}\`.`;
-        console.log(prompt);
         const responseMessage = await fetchLlmResponseMessage(prompt);
         console.log("LLM response message:");
         console.log(responseMessage);

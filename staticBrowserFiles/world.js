@@ -1,5 +1,6 @@
 const canvas = document.getElementById("canvas");
 const inventoryEl = document.getElementById("inventory");
+const memosEl = document.getElementById("memos");
 const ctx = canvas.getContext("2d");
 const cellSize = 32;
 
@@ -28,6 +29,21 @@ function updateInventory(inventory) {
     }
     const itemIcons = inventory.map((name) => icons[name] ?? "?").join("");
     inventoryEl.textContent = `Player inventory: ${itemIcons}`;
+}
+
+function updateMemos(memos) {
+    memosEl.replaceChildren();
+    if (memos.length === 0) {
+        const item = document.createElement("li");
+        item.textContent = "(none)";
+        memosEl.appendChild(item);
+        return;
+    }
+    for (let index = 0; index < memos.length; index++) {
+        const item = document.createElement("li");
+        item.textContent = `#${index + 1}: "${memos[index]}"`;
+        memosEl.appendChild(item);
+    }
 }
 
 function drawPlayerViewOutline(x, y) {
@@ -98,6 +114,7 @@ function drawWorld(state) {
     }
 
     updateInventory(state.inventory);
+    updateMemos(state.memos);
 }
 
 async function init() {

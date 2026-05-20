@@ -219,6 +219,18 @@ export class Player extends Entity {
         this.memos.splice(memoIndex, 1);
     }
 
+    updateMemo(memoIndex: number, message: string): void {
+        if (memoIndex < 0 || memoIndex >= this.memos.length) {
+            throw new WorldError("Memo index is out of bounds.");
+        }
+        if (message.length > maxMemoLength) {
+            throw new WorldError(
+                `Memo cannot be longer than ${maxMemoLength} characters.`
+            );
+        }
+        this.memos[memoIndex] = message;
+    }
+
     private getVisibleEntityName(x: number, y: number): string {
         if (!this.world.containsPos([x, y])) {
             return "wall";
@@ -317,6 +329,21 @@ export class Player extends Entity {
                     );
                 }
                 this.deleteMemo(memoNumber - 1);
+                return;
+            }
+            case "updateMemo": {
+                if (command.args.length !== 2) {
+                    throw new WorldError(
+                        `updateMemo expects 2 arguments, got ${command.args.length}.`
+                    );
+                }
+                const memoNumber = Number(command.args[0]);
+                if (!Number.isInteger(memoNumber)) {
+                    throw new WorldError(
+                        `Invalid memo number: "${command.args[0]}".`
+                    );
+                }
+                this.updateMemo(memoNumber - 1, command.args[1]);
                 return;
             }
             default:
