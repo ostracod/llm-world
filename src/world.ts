@@ -233,9 +233,13 @@ export class Player extends Entity {
         return entity.getName();
     }
 
-    getVisibleEntitiesText(): string {
+    getViewportText(): string {
         const [px, py] = this.pos!;
-        const lines: string[] = [];
+        const xCoords: string[] = [];
+        for (let x = px - playerViewRadius; x <= px + playerViewRadius; x++) {
+            xCoords.push(`X = ${x}`);
+        }
+        const lines: string[] = ["       " + xCoords.join(", ")];
         let rowNumber = 1;
         for (let y = py - playerViewRadius; y <= py + playerViewRadius; y++) {
             const names: string[] = [];
@@ -345,7 +349,7 @@ export class Player extends Entity {
 
     getMemosText(): string {
         if (this.memos.length === 0) {
-            return `You have not saved any memos yet. You can save up to ${maxMemoAmount} memos.`;
+            return `You have zero saved memos. You can save up to ${maxMemoAmount} memos.`;
         }
         const memoLines = this.memos.map((memo, index) => `* Memo #${index + 1}: "${memo}"`);
         const remainingSpace = maxMemoAmount - this.memos.length;

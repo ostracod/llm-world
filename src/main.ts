@@ -191,12 +191,13 @@ const fetchLlmResponseMessage = async (prompt: string): Promise<string> => {
 };
 
 const runLlm = async () => {
+    let turnNumber = 1;
     let lastCommand: PlayerCommand | null = null;
     let lastCommandError: string | null = null;
     while (true) {
         console.log("========================================================");
         console.log("Prompting LLM...\n");
-        const visibleEntitiesText = player.getVisibleEntitiesText();
+        const viewportText = player.getViewportText();
         let lastCommandDescription: string;
         if (lastCommand === null) {
             lastCommandDescription = "You have not issued any commands yet.";
@@ -214,7 +215,8 @@ This command failed with the following message: "${lastCommandError}"`;
         }
         const prompt = `You are a player in a virtual world which is a grid of ${world.width} by ${world.height} spaces. The world contains socks in random positions and a basket. Your mission is to collect socks and put them in the basket.
 
-You are able to perform commands to move, interact with the world, and update your memories ("memos").
+The current turn number is ${turnNumber}.
+During each turn you can perform a command to move, interact with items, or update your memories ("memos").
 Each command begins with \`${commandPrefix}\`, followed by a command name and arguments. For commands which accept a direction, <direction> may be \`north\`, \`south\`, \`east\`, or \`west\`.
 The following commands are available:
 * \`${commandPrefix} walk <direction>\`
@@ -236,23 +238,32 @@ The following commands are available:
     * Deletes the specified memo, so you will not see it during future turns.
     * For example: \`${commandPrefix} deleteMemo 3\` deletes memo #3.
 
-You should use memos to save important information about the world and your current strategy. Between turns your chain-of-thought reasoning is erased, but memos persist. Before you move or interact with the world, make sure that your memos are updated to reflect your current observations and plans.
+You should use memos to save important information about the world and your current strategy. You will forget all of your current chain-of-thought reasoning during the next turn, but the memos will persist.
 
 ${lastCommandDescription}
 
 ${player.getMemosText()}
 
+The "viewport" shows the contents of 5 by 5 spaces centered around your player. The viewport shows X coordinates on top, and Y coordinates on the left. The viewport lists your player as "you".
+North is negative Y, and south is positive Y. West is negative X, and east is positive X.
+During every turn, you will only be able to view the current viewport. You will not remember anything about the viewport from previous turns unless described in a memo.
+
 Your current coordinates are X = ${player.pos[0]}, Y = ${player.pos[1]}.
 
-These are the current contents of the spaces which are visible within a 5 by 5 viewport centered around you:
+This is your current viewport:
 
-${visibleEntitiesText}
-
-(Rows are listed from north to south, and each row lists spaces from west to east.)
+${viewportText}
 
 ${player.getInventoryDescription()}
 
-Please respond with a command now to perform your next action. Make sure that the command begins with \`${commandPrefix}\`.`;
+When deciding your next command, you should use the following prioritization:
+1. If a memo directly contradicts your current observations, delete the memo.
+2. If two memos seem to be redundant with each other, delete one of the memos.
+3. If you see something in the world which is important to remember, write a memo about it (if such a memo does not already exist).
+4. If you come up with a new plan, write a memo about it.
+5. Otherwise, move or interact with items.
+
+Please respond with a single command now to perform during the current turn. Make sure that the command begins with \`${commandPrefix}\`.`;
         console.log(prompt);
         const responseMessage = await fetchLlmResponseMessage(prompt);
         console.log("LLM response message:");
@@ -272,6 +283,7 @@ Please respond with a command now to perform your next action. Make sure that th
         }
         console.log("");
         broadcastWorldState();
+        turnNumber += 1;
     }
 }
 
