@@ -249,8 +249,9 @@ ${lastCommandDescription}
 
 ${player.getMemosText()}
 
-The "viewport" shows the contents of 5 by 5 spaces centered around your player. The viewport shows X coordinates on top, and Y coordinates on the left. The viewport lists your player as "you".
+The "viewport" shows the contents of 5 by 5 spaces centered around your player. The viewport shows X coordinates on top, and Y coordinates on the left.
 North is negative Y, and south is positive Y. West is negative X, and east is positive X.
+The viewport lists your player as "you". Only one entity can occupy a space at a time. If a space contains no entity, the viewport will display "empty". Entities are never invisible.
 During every turn, you will only be able to view the current viewport. You will not remember anything about the viewport from previous turns unless described in a memo.
 
 Your current coordinates are X = ${player.pos[0]}, Y = ${player.pos[1]}.

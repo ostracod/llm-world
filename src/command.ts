@@ -54,7 +54,7 @@ export const parseCommandWithoutPrefix = (command: string): PlayerCommand => {
 export const parseResponseMessage = (message: string): PlayerCommand => {
     const lines = message.split(/\r?\n/);
     let commandLine: string | undefined;
-    for (let lineIndex = lines.length - 1; lineIndex >= 0; lineIndex--) {
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
         if (lines[lineIndex].includes(commandPrefix)) {
             commandLine = lines[lineIndex];
             break;
