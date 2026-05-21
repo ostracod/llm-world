@@ -251,8 +251,9 @@ ${player.getMemosText()}
 
 The "viewport" shows the contents of 5 by 5 spaces centered around your player. The viewport shows X coordinates on top, and Y coordinates on the left.
 North is negative Y, and south is positive Y. West is negative X, and east is positive X.
-The viewport lists your player as "you". Only one entity can occupy a space at a time. If a space contains no entity, the viewport will display "empty". Entities are never invisible.
-During every turn, you will only be able to view the current viewport. You will not remember anything about the viewport from previous turns unless described in a memo.
+The viewport lists your player as "you". If a space contains no entity, the viewport will display "empty". Entities are never invisible.
+During every turn, you will only be able to view the current viewport. You will not remember the contents of spaces outside of your current viewport unless described in a memo.
+During every turn, you will be able to see your current coordinates. You do not need to write your current coordinates in a memo.
 
 Your current coordinates are X = ${player.pos[0]}, Y = ${player.pos[1]}.
 
@@ -264,6 +265,7 @@ ${player.getInventoryDescription()}
 
 When deciding your next command, you should use the following prioritization:
 1. If a memo directly contradicts your current observations, delete or update the memo.
+    * If the only error in a memo is about your current coordinates, update the memo to exclude that information.
 2. If two memos seem to be redundant with each other, delete one of the memos.
 3. If you see something in the world which is important to remember, write a memo about it (if such a memo does not already exist).
 4. If you come up with a new plan, write a memo about it.
